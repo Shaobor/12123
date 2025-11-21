@@ -1,7 +1,7 @@
 {
   "domain": "12123",
   "name": "12123",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "requirements": [
     "aiohttp>=3.8.0"
   ],
