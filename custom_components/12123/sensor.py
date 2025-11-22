@@ -375,7 +375,8 @@ class Base12123Sensor(CoordinatorEntity, SensorEntity):
         self._attr_icon = icon
         self._attr_name = name
         self._attr_unique_id = f"{entry_id}_{unique_id_suffix}"
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        # 移除 DIAGNOSTIC 类别，让传感器显示为普通传感器而不是诊断
+        # self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._entry_id = entry_id
 
     def _format_update_time(self) -> str:
