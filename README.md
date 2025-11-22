@@ -44,13 +44,13 @@ Home Assistant 自定义集成，用于集成12123服务。
 
 如果这个项目对你有帮助，欢迎捐赠支持开发！
 
-### 支付宝
+<div align="center">
 
-![支付宝收款码](donate_alipay.jpg)
+| 支付宝 | 微信 |
+|:------:|:----:|
+| <img src="donate_alipay.jpg" width="200" /> | <img src="donate_wechat.jpg" width="200" /> |
 
-### 微信
-
-![微信收款码](donate_wechat.jpg)
+</div>
 
 感谢你的支持！🙏
 
