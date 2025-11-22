@@ -11,7 +11,7 @@ Home Assistant 自定义集成，用于集成12123服务。
 1. 确保已安装 [HACS](https://hacs.xyz/)
 2. 在 HACS 中，进入"集成"页面
 3. 点击右上角的三个点，选择"自定义仓库"
-4. 添加此仓库 URL：`https://github.com/758639304/12123`
+4. 添加此仓库 URL：`https://github.com/Shaobor/12123`
 5. 选择类别为"集成"
 6. 点击"添加"
 7. 在集成页面搜索"12123"并安装
@@ -80,7 +80,7 @@ logger:
 
 ## 支持
 
-如有问题或建议，请在 [GitHub Issues](https://github.com/758639304/12123/issues) 中提出。
+如有问题或建议，请在 [GitHub Issues](https://github.com/Shaobor/12123/issues) 中提出。
 
 ## 捐赠
 
