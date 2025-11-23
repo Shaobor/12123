@@ -282,48 +282,71 @@ async def async_setup_entry(
     )
     login_coordinator._async_update_data = _update_login_status
 
-    # 5. GET保活请求（5分钟）
+    # 5. GET保活请求（1分钟）- 使用登录接口返回的URL进行保活
     async def get_keepalive_task(_: datetime) -> None:
-        """定时执行GET请求以维持会话"""
-        if url:
-            # 使用正确的Cookie格式，与其他API请求保持一致
-            # 只添加非None的Cookie值
-            cookie_parts = [f"JSESSIONID-L={jsessionid}"]
-            if access_token:
-                cookie_parts.append(f"accessToken={access_token}")
-            if acw_tc:
-                cookie_parts.append(f"acw_tc={acw_tc}")
-            cookie = "; ".join(cookie_parts)
-            
-            headers = {
-                "Cookie": cookie,
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "*/*",
-                "Connection": "keep-alive",
-            }
-            try:
-                _LOGGER.debug(f"执行GET保活请求，URL: {url[:50]}...")
-                async with session.get(url, headers=headers, allow_redirects=True) as resp:
-                    if resp.status == 200:
-                        _LOGGER.debug(f"GET保活请求成功，状态码: {resp.status}")
-                    elif resp.status == 404:
-                        # 404是预期的，因为登录URL有时效性，不影响功能
-                        _LOGGER.debug(f"GET保活请求返回404 (URL已过期，这是正常的，不影响功能)")
-                    else:
-                        _LOGGER.warning(f"GET保活请求失败，状态码: {resp.status}")
-                        # 尝试读取响应内容以获取更多信息
-                        try:
-                            response_text = await resp.text()
-                            if "/m/login" in response_text:
-                                _LOGGER.warning("GET保活请求：检测到需要重新登录")
-                        except Exception as e:
-                            _LOGGER.debug(f"GET保活请求：读取响应内容时出错: {e}")
-            except aiohttp.ClientError as e:
-                _LOGGER.warning(f"GET保活请求网络错误: {e}")
-            except Exception as e:
-                _LOGGER.error(f"GET保活请求未知错误: {e}")
-        else:
-            _LOGGER.warning("GET保活请求：URL为空，跳过请求")
+        """定时执行GET保活请求以维持会话（使用登录成功后的URL，自动重定向）"""
+        if not url:
+            _LOGGER.debug("保活请求：URL为空，跳过请求")
+            return
+        
+        if not jsessionid or not access_token:
+            _LOGGER.debug("保活请求：缺少必要的认证信息，跳过请求")
+            return
+        
+        # 构建Cookie，包含所有必要的认证信息
+        cookie_parts = []
+        if access_token:
+            cookie_parts.append(f"accessToken={access_token}")
+        if acw_tc:
+            cookie_parts.append(f"acw_tc={acw_tc}")
+        if jsessionid:
+            cookie_parts.append(f"JSESSIONID-L={jsessionid}")
+        
+        cookie = "; ".join(cookie_parts)
+        
+        headers = {
+            "Cookie": cookie,
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "*/*",
+            "Connection": "keep-alive",
+            "Referer": f"https://{province_code}.122.gov.cn/"
+        }
+        
+        try:
+            _LOGGER.debug(f"执行GET保活请求，URL: {url}")
+            async with session.get(url, headers=headers, allow_redirects=True) as resp:
+                # 记录重定向后的最终URL
+                final_url = str(resp.url)
+                if resp.url != url:
+                    _LOGGER.debug(f"GET保活请求发生重定向：原始URL: {url} -> 最终URL: {final_url}")
+                
+                # 优先检查最终URL判断会话状态（更可靠）
+                if "/views/member" in final_url:
+                    # 重定向到 /views/member/，说明会话有效
+                    _LOGGER.info(f"GET保活请求成功，会话有效，重定向到已登录页面: {final_url} (状态码: {resp.status})")
+                elif "/m/login" in final_url or "/login" in final_url:
+                    # 重定向到登录页面，说明会话失效
+                    _LOGGER.warning(f"GET保活请求：会话已失效（被踢掉登录状态），重定向到登录页面: {final_url} (状态码: {resp.status})")
+                # 如果无法通过URL判断，则通过状态码判断
+                elif resp.status == 200:
+                    _LOGGER.info(f"GET保活请求成功，状态码: {resp.status}，最终URL: {final_url}")
+                # 失败：返回302，会话失效（被踢掉登录状态）
+                elif resp.status == 302:
+                    location = resp.headers.get('Location', '')
+                    _LOGGER.warning(f"GET保活请求返回302，会话已失效（被踢掉登录状态），重定向到: {location}")
+                # 404可能是URL已过期，但JSESSIONID可能仍然有效（如果重定向到 /views/member/ 则已在上面的判断中处理）
+                elif resp.status == 404:
+                    _LOGGER.debug(f"GET保活请求返回404 (URL可能已过期，但JSESSIONID可能仍然有效)，最终URL: {final_url}")
+                # 400可能是URL参数无效，但JSESSIONID可能仍然有效
+                elif resp.status == 400:
+                    _LOGGER.debug(f"GET保活请求返回400 (URL参数可能无效，但JSESSIONID可能仍然有效)，最终URL: {final_url}")
+                # 其他状态码
+                else:
+                    _LOGGER.warning(f"GET保活请求返回状态码: {resp.status}，最终URL: {final_url}")
+        except aiohttp.ClientError as e:
+            _LOGGER.warning(f"GET保活请求网络错误: {e}")
+        except Exception as e:
+            _LOGGER.error(f"GET保活请求未知错误: {e}")
 
     # 注册GET保活定时任务
     cancel_callback = async_track_time_interval(hass, get_keepalive_task, GET_KEEPALIVE_INTERVAL)
@@ -631,10 +654,19 @@ class DriverLicenseSensor(Base12123Sensor):
                             attributes["使用有效期至"] = value if value is not None else "未知"
                             _LOGGER.info(f"驾驶证传感器：使用有效期至 = {value}")
                         
-                        if "zt" in drv_info:
-                            value = drv_info["zt"]
+                        # 优先使用ztStr（状态文字描述），如果没有再使用zt（状态代码）
+                        if "ztStr" in drv_info:
+                            value = drv_info["ztStr"]
                             attributes["驾驶证状态"] = value if value is not None else "未知"
                             _LOGGER.info(f"驾驶证传感器：驾驶证状态 = {value}")
+                        elif "ztstr" in drv_info:
+                            value = drv_info["ztstr"]
+                            attributes["驾驶证状态"] = value if value is not None else "未知"
+                            _LOGGER.info(f"驾驶证传感器：驾驶证状态 = {value}")
+                        elif "zt" in drv_info:
+                            value = drv_info["zt"]
+                            attributes["驾驶证状态"] = value if value is not None else "未知"
+                            _LOGGER.info(f"驾驶证传感器：驾驶证状态 = {value}（使用状态代码）")
                         
                         if "ljjf" in drv_info:
                             value = drv_info["ljjf"]

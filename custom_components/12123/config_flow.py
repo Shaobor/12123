@@ -167,7 +167,7 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except Exception as e:
                     errors["base"] = ERROR_MESSAGES.get("session_recreate_failed", "重新创建会话失败，请重试")
                     _LOGGER.error(f"重新创建session失败: {str(e)}")
-                    return self._show_next_form(errors)
+                return self._show_next_form(errors)
 
             try:
                 headers = {
@@ -203,13 +203,23 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                                     async with self._session.get(
                                             self.url,
-                                            headers=new_headers
+                                            headers=new_headers,
+                                            allow_redirects=True
                                     ) as second_response:
                                         # 验证重定向响应是否成功
                                         if second_response.status != 200:
                                             _LOGGER.error(f"重定向请求失败，状态码: {second_response.status}")
                                             errors["base"] = ERROR_MESSAGES.get("auth_failed", "认证过程中获取用户信息失败")
                                             return self._show_next_form(errors)
+
+                                        # 记录重定向信息（用于调试）
+                                        final_url = str(second_response.url)
+                                        _LOGGER.info(f"登录URL重定向：原始URL: {self.url[:50]}... -> 最终URL: {final_url[:50]}...")
+                                        
+                                        # 保存原始的带ticket的URL（用于保活），因为Node-RED测试表明原始URL可以成功保活
+                                        # 保活时会自动重定向到最终的登录页面
+                                        keepalive_url = self.url
+                                        _LOGGER.info(f"保存保活URL（原始URL）: {keepalive_url[:50]}...")
 
                                         # 提取认证cookies
                                         cookies = self._extract_auth_cookies(second_response)
@@ -264,7 +274,7 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                                 "JSESSIONID-L": cookies["jsessionid"],
                                                 "acw_tc": cookies.get("acw_tc") or "",  # acw_tc是可选的，如果为None则使用空字符串
                                                 "sf": self._selected_province_code,
-                                                "url": self.url,
+                                                "url": keepalive_url,  # 使用原始的带ticket的URL，保活时会自动重定向
                                                 "account_name": account_name,
                                                 "province_name": self._selected_province
                                             },
@@ -442,6 +452,23 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             _LOGGER.info(f"用户信息接口JSON解析成功: {type(data)}")
                             _LOGGER.debug(f"用户信息接口响应结构: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
 
+                            # 先检查API响应是否成功
+                            if isinstance(data, dict) and "code" in data:
+                                code = data.get("code")
+                                if code != 200 and code != "200":
+                                    error_message = data.get("message", "未知错误")
+                                    _LOGGER.warning(f"用户信息接口返回错误，代码: {code}, 消息: {error_message}")
+                                    _LOGGER.debug(f"用户信息接口完整响应: {data}")
+                                    # 如果返回错误，直接返回None，不尝试提取数据
+                                    return None
+                                else:
+                                    _LOGGER.info(f"用户信息接口返回成功，代码: {code}")
+                                    # 检查是否有data字段
+                                    if "data" not in data:
+                                        _LOGGER.warning(f"用户信息接口返回成功但缺少data字段，响应键: {list(data.keys())}")
+                                        # 即使没有data字段，也尝试从顶层查找信息
+                                        # 某些API可能直接在顶层返回数据
+
                             # 尝试从返回数据中提取身份证号等信息
                             user_info = {}
 
@@ -449,43 +476,72 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             if data and isinstance(data, dict):
                                 _LOGGER.info(f"API返回的顶级数据结构: {list(data.keys())}")
 
-                                # 检查数据结构，可能有不同的字段名
+                                # 优先检查 drvs 数组（这是最常见的结构）
                                 if "data" in data and isinstance(data["data"], dict):
                                     data_section = data["data"]
-
-                                    # 优先获取身份证号作为唯一标识符
-                                    _LOGGER.info(f"开始提取用户信息，数据结构: {list(data_section.keys())}")
-
-                                    # 打印所有可能的字段名用于调试
-                                    for key, value in data_section.items():
-                                        if 'sf' in key.lower() or 'id' in key.lower() or 'card' in key.lower() or '证' in key or '号' in key:
-                                            _LOGGER.info(f"发现可能的身份字段: {key} = {str(value)[:10]}...")
-
-                                    for id_field in ["sfzmhm", "idCard", "identityCard", "身份证号", "sfzm", "idcard"]:
-                                        if id_field in data_section and data_section[id_field]:
-                                            id_card = str(data_section[id_field])
-                                            _LOGGER.info(f"找到身份证号字段 {id_field}: {id_card[:6]}...{id_card[-4:]}")
-                                            # 使用后4位作为标识符
-                                            if len(id_card) >= 4:
-                                                user_info["身份证号后4位"] = id_card[-4:]
-                                                user_info["完整身份证号"] = id_card  # 用于生成唯一标识符
-                                            else:
-                                                user_info["身份证号后4位"] = id_card
-                                                user_info["完整身份证号"] = id_card
-                                            break
-
-                                    # 如果没找到身份证号，获取姓名作为备用
-                                    if "完整身份证号" not in user_info:
-                                        _LOGGER.info("未找到身份证号，尝试获取姓名")
-                                        for name_field in ["姓名", "name", "xm", "driverName", "xmxx"]:
-                                            if name_field in data_section and data_section[name_field]:
-                                                user_info["姓名"] = str(data_section[name_field])
-                                                _LOGGER.info(f"找到姓名字段 {name_field}: {user_info['姓名']}")
+                                    
+                                    # 检查 drvs 数组
+                                    if "drvs" in data_section and isinstance(data_section["drvs"], list) and len(data_section["drvs"]) > 0:
+                                        drv_info = data_section["drvs"][0]  # 取第一个驾驶证信息
+                                        _LOGGER.info(f"从drvs数组提取用户信息，字段: {list(drv_info.keys())}")
+                                        
+                                        # 优先获取身份证号
+                                        for id_field in ["sfzmhm", "idCard", "identityCard", "身份证号", "sfzm", "idcard"]:
+                                            if id_field in drv_info and drv_info[id_field]:
+                                                id_card = str(drv_info[id_field])
+                                                _LOGGER.info(f"在drvs中找到身份证号字段 {id_field}: {id_card[:6]}...{id_card[-4:]}")
+                                                # 使用后4位作为标识符
+                                                if len(id_card) >= 4:
+                                                    user_info["身份证号后4位"] = id_card[-4:]
+                                                    user_info["完整身份证号"] = id_card
+                                                else:
+                                                    user_info["身份证号后4位"] = id_card
+                                                    user_info["完整身份证号"] = id_card
                                                 break
+                                        
+                                        # 如果没找到身份证号，获取姓名作为备用
+                                        if "完整身份证号" not in user_info:
+                                            _LOGGER.info("drvs中未找到身份证号，尝试获取姓名")
+                                            for name_field in ["姓名", "name", "xm", "driverName", "xmxx"]:
+                                                if name_field in drv_info and drv_info[name_field]:
+                                                    user_info["姓名"] = str(drv_info[name_field])
+                                                    _LOGGER.info(f"在drvs中找到姓名字段 {name_field}: {user_info['姓名']}")
+                                                    break
+                                    
+                                    # 如果drvs中没有找到，尝试从data_section直接查找
+                                    if "完整身份证号" not in user_info and "姓名" not in user_info:
+                                        _LOGGER.info(f"开始从data_section提取用户信息，数据结构: {list(data_section.keys())}")
+
+                                        # 打印所有可能的字段名用于调试
+                                        for key, value in data_section.items():
+                                            if 'sf' in key.lower() or 'id' in key.lower() or 'card' in key.lower() or '证' in key or '号' in key:
+                                                _LOGGER.info(f"发现可能的身份字段: {key} = {str(value)[:10]}...")
+
+                                        for id_field in ["sfzmhm", "idCard", "identityCard", "身份证号", "sfzm", "idcard"]:
+                                            if id_field in data_section and data_section[id_field]:
+                                                id_card = str(data_section[id_field])
+                                                _LOGGER.info(f"找到身份证号字段 {id_field}: {id_card[:6]}...{id_card[-4:]}")
+                                                # 使用后4位作为标识符
+                                                if len(id_card) >= 4:
+                                                    user_info["身份证号后4位"] = id_card[-4:]
+                                                    user_info["完整身份证号"] = id_card  # 用于生成唯一标识符
+                                                else:
+                                                    user_info["身份证号后4位"] = id_card
+                                                    user_info["完整身份证号"] = id_card
+                                                break
+
+                                        # 如果没找到身份证号，获取姓名作为备用
+                                        if "完整身份证号" not in user_info:
+                                            _LOGGER.info("未找到身份证号，尝试获取姓名")
+                                            for name_field in ["姓名", "name", "xm", "driverName", "xmxx"]:
+                                                if name_field in data_section and data_section[name_field]:
+                                                    user_info["姓名"] = str(data_section[name_field])
+                                                    _LOGGER.info(f"找到姓名字段 {name_field}: {user_info['姓名']}")
+                                                    break
 
                                 # 如果没找到信息，尝试其他可能的路径
                                 if "完整身份证号" not in user_info and "姓名" not in user_info:
-                                    # 有些API可能返回驾驶证信息数组
+                                    # 有些API可能返回驾驶证信息数组（直接在顶层）
                                     if "drvlicinfo" in data and isinstance(data["drvlicinfo"], list) and len(data["drvlicinfo"]) > 0:
                                         _LOGGER.info(f"尝试从drvlicinfo数组获取用户信息，数组长度: {len(data['drvlicinfo'])}")
                                         first_license = data["drvlicinfo"][0]
@@ -519,8 +575,27 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                                     _LOGGER.info(f"在drvlicinfo中找到姓名字段 {name_field}: {user_info['姓名']}")
                                                     break
 
-                                # 如果还是没找到，进行全数据搜索
-                                if "完整身份证号" not in user_info and "姓名" not in user_info:
+                                # 如果data字段不存在，尝试从顶层直接查找（某些API可能直接在顶层返回数据）
+                                if "完整身份证号" not in user_info and "姓名" not in user_info and "data" not in data:
+                                    _LOGGER.info("data字段不存在，尝试从顶层直接查找用户信息")
+                                    # 尝试从顶层直接查找身份证号
+                                    for id_field in ["sfzmhm", "idCard", "identityCard", "身份证号", "sfzm", "idcard"]:
+                                        if id_field in data and data[id_field]:
+                                            id_card = str(data[id_field])
+                                            _LOGGER.info(f"在顶层找到身份证号字段 {id_field}: {id_card[:6]}...{id_card[-4:]}")
+                                            if len(id_card) >= 4:
+                                                user_info["身份证号后4位"] = id_card[-4:]
+                                                user_info["完整身份证号"] = id_card
+                                            else:
+                                                user_info["身份证号后4位"] = id_card
+                                                user_info["完整身份证号"] = id_card
+                                            break
+                                    
+                                    # 如果还是没找到，进行全数据搜索
+                                    if "完整身份证号" not in user_info and "姓名" not in user_info:
+                                        _LOGGER.info("前述路径未找到用户信息，开始全数据搜索")
+                                        user_info = self._search_user_info_recursively(data)
+                                elif "完整身份证号" not in user_info and "姓名" not in user_info:
                                     _LOGGER.info("前述路径未找到用户信息，开始全数据搜索")
                                     user_info = self._search_user_info_recursively(data)
 
