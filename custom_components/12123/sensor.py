@@ -282,7 +282,7 @@ async def async_setup_entry(
     )
     login_coordinator._async_update_data = _update_login_status
 
-    # 5. GET保活请求（1分钟）- 使用登录接口返回的URL进行保活
+    # 5. GET保活请求（5分钟）- 使用登录接口返回的URL进行保活
     async def get_keepalive_task(_: datetime) -> None:
         """定时执行GET保活请求以维持会话（使用登录成功后的URL，自动重定向）"""
         if not url:
