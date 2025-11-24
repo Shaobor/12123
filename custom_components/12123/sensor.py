@@ -239,9 +239,8 @@ async def async_setup_entry(
         logger=_LOGGER,
         name=f"{DOMAIN}_vehicle",
         update_interval=VEHICLE_INFO_INTERVAL,
-        config_entry=entry,
+        update_method=_update_vehicle_data,
     )
-    vehicle_coordinator._async_update_data = _update_vehicle_data
 
     # 2. 创建驾驶证违章信息Coordinator（10分钟）
     async def _update_violation_data():
@@ -252,9 +251,8 @@ async def async_setup_entry(
         logger=_LOGGER,
         name=f"{DOMAIN}_violation",
         update_interval=VIOLATION_INFO_INTERVAL,
-        config_entry=entry,
+        update_method=_update_violation_data,
     )
-    violation_coordinator._async_update_data = _update_violation_data
 
     # 3. 创建车辆监控信息Coordinator（30分钟）
     async def _update_surveillance_data():
@@ -265,9 +263,8 @@ async def async_setup_entry(
         logger=_LOGGER,
         name=f"{DOMAIN}_surveillance",
         update_interval=SURVEILLANCE_INFO_INTERVAL,
-        config_entry=entry,
+        update_method=_update_surveillance_data,
     )
-    surveillance_coordinator._async_update_data = _update_surveillance_data
 
     # 4. 创建登录状态检查Coordinator（5分钟）
     async def _update_login_status():
@@ -278,9 +275,8 @@ async def async_setup_entry(
         logger=_LOGGER,
         name=f"{DOMAIN}_login",
         update_interval=LOGIN_CHECK_INTERVAL,
-        config_entry=entry,
+        update_method=_update_login_status,
     )
-    login_coordinator._async_update_data = _update_login_status
 
     # 5. GET保活请求（5分钟）- 使用登录接口返回的URL进行保活
     async def get_keepalive_task(_: datetime) -> None:
@@ -288,12 +284,11 @@ async def async_setup_entry(
         if not url:
             _LOGGER.debug("保活请求：URL为空，跳过请求")
             return
-        
+
         if not jsessionid or not access_token:
             _LOGGER.debug("保活请求：缺少必要的认证信息，跳过请求")
             return
-        
-        # 构建Cookie，包含所有必要的认证信息
+
         cookie_parts = []
         if access_token:
             cookie_parts.append(f"accessToken={access_token}")
@@ -301,48 +296,55 @@ async def async_setup_entry(
             cookie_parts.append(f"acw_tc={acw_tc}")
         if jsessionid:
             cookie_parts.append(f"JSESSIONID-L={jsessionid}")
-        
+
         cookie = "; ".join(cookie_parts)
-        
+
         headers = {
             "Cookie": cookie,
             "User-Agent": "Mozilla/5.0",
             "Accept": "*/*",
             "Connection": "keep-alive",
-            "Referer": f"https://{province_code}.122.gov.cn/"
+            "Referer": f"https://{province_code}.122.gov.cn/",
         }
-        
+
         try:
             _LOGGER.debug(f"执行GET保活请求，URL: {url}")
             async with session.get(url, headers=headers, allow_redirects=True) as resp:
-                # 记录重定向后的最终URL
                 final_url = str(resp.url)
                 if resp.url != url:
-                    _LOGGER.debug(f"GET保活请求发生重定向：原始URL: {url} -> 最终URL: {final_url}")
-                
-                # 优先检查最终URL判断会话状态（更可靠）
+                    _LOGGER.debug(
+                        f"GET保活请求发生重定向：原始URL: {url} -> 最终URL: {final_url}"
+                    )
+
                 if "/views/member" in final_url:
-                    # 重定向到 /views/member/，说明会话有效
-                    _LOGGER.info(f"GET保活请求成功，会话有效，重定向到已登录页面: {final_url} (状态码: {resp.status})")
+                    _LOGGER.info(
+                        f"GET保活请求成功，会话有效，重定向到已登录页面: {final_url} (状态码: {resp.status})"
+                    )
                 elif "/m/login" in final_url or "/login" in final_url:
-                    # 重定向到登录页面，说明会话失效
-                    _LOGGER.warning(f"GET保活请求：会话已失效（被踢掉登录状态），重定向到登录页面: {final_url} (状态码: {resp.status})")
-                # 如果无法通过URL判断，则通过状态码判断
+                    _LOGGER.warning(
+                        f"GET保活请求：会话已失效（被踢掉登录状态），重定向到登录页面: {final_url} (状态码: {resp.status})"
+                    )
                 elif resp.status == 200:
-                    _LOGGER.info(f"GET保活请求成功，状态码: {resp.status}，最终URL: {final_url}")
-                # 失败：返回302，会话失效（被踢掉登录状态）
+                    _LOGGER.info(
+                        f"GET保活请求成功，状态码: {resp.status}，最终URL: {final_url}"
+                    )
                 elif resp.status == 302:
-                    location = resp.headers.get('Location', '')
-                    _LOGGER.warning(f"GET保活请求返回302，会话已失效（被踢掉登录状态），重定向到: {location}")
-                # 404可能是URL已过期，但JSESSIONID可能仍然有效（如果重定向到 /views/member/ 则已在上面的判断中处理）
+                    location = resp.headers.get("Location", "")
+                    _LOGGER.warning(
+                        f"GET保活请求返回302，会话已失效（被踢掉登录状态），重定向到: {location}"
+                    )
                 elif resp.status == 404:
-                    _LOGGER.debug(f"GET保活请求返回404 (URL可能已过期，但JSESSIONID可能仍然有效)，最终URL: {final_url}")
-                # 400可能是URL参数无效，但JSESSIONID可能仍然有效
+                    _LOGGER.debug(
+                        f"GET保活请求返回404 (URL可能已过期，但JSESSIONID可能仍然有效)，最终URL: {final_url}"
+                    )
                 elif resp.status == 400:
-                    _LOGGER.debug(f"GET保活请求返回400 (URL参数可能无效，但JSESSIONID可能仍然有效)，最终URL: {final_url}")
-                # 其他状态码
+                    _LOGGER.debug(
+                        f"GET保活请求返回400 (URL参数可能无效，但JSESSIONID可能仍然有效)，最终URL: {final_url}"
+                    )
                 else:
-                    _LOGGER.warning(f"GET保活请求返回状态码: {resp.status}，最终URL: {final_url}")
+                    _LOGGER.warning(
+                        f"GET保活请求返回状态码: {resp.status}，最终URL: {final_url}"
+                    )
         except aiohttp.ClientError as e:
             _LOGGER.warning(f"GET保活请求网络错误: {e}")
         except Exception as e:
