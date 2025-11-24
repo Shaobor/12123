@@ -17,8 +17,8 @@ from datetime import timedelta, datetime
 from typing import Any, Dict, Optional
 
 from .const import (
-    DOMAIN, VEHICLE_INFO_INTERVAL, VIOLATION_INFO_INTERVAL, SURVEILLANCE_INFO_INTERVAL,
-    LOGIN_CHECK_INTERVAL, GET_KEEPALIVE_INTERVAL, REQUEST_TIMEOUT, DEFAULT_ICON, PROVINCE_CODE_MAPPING,
+    DOMAIN, VIOLATION_INFO_INTERVAL, SURVEILLANCE_INFO_INTERVAL,
+    GET_KEEPALIVE_INTERVAL, REQUEST_TIMEOUT, DEFAULT_ICON, PROVINCE_CODE_MAPPING,
     VIOLATION_POINTS_MAP
 )
 
@@ -52,6 +52,17 @@ async def fetch_vehicle_info(
             if resp.status == 200:
                 try:
                     data = await resp.json()
+                    if isinstance(data, dict) and "code" in data:
+                        code = str(data.get("code"))
+                        if code and code != "200":
+                            message = data.get("message") or data.get("msg") or "服务异常"
+                            error_text = f"服务异常 (代码: {code}): {message}"
+                            return {
+                                "success": False,
+                                "error": error_text,
+                                "code": code,
+                                "raw": data,
+                            }
                     return {"success": True, "data": data}
                 except aiohttp.ContentTypeError as json_err:
                     response_text = await resp.text()
@@ -137,47 +148,6 @@ async def fetch_surveillance_info(
         return {"success": False, "error": str(e)}
 
 
-async def check_login_status(
-    session: aiohttp.ClientSession,
-    access_token: str,
-    jsessionid: str,
-    province_code: str
-) -> Optional[Dict[str, Any]]:
-    """检查登录状态（使用车辆信息接口）"""
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "Cookie": f"JSESSIONID-L={jsessionid}",
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "*/*",
-        "Connection": "keep-alive"
-    }
-
-    url = f"https://{province_code}.122.gov.cn/user/m/userinfo/allvehs"
-    payload = "page=1&size=1"  # 最小数据量检查登录状态
-
-    try:
-        async with session.post(url, headers=headers, data=payload) as resp:
-            if resp.status == 200:
-                try:
-                    data = await resp.json()
-                    # 检查是否是错误响应
-                    if isinstance(data, dict) and "code" in data:
-                        code = data.get("code")
-                        if code != 200 and code != "200":
-                            error_message = data.get("message", "未知错误")
-                            return {"success": True, "logged_in": False, "error": f"服务异常: {error_message}"}
-                    return {"success": True, "logged_in": True, "data": data}
-                except aiohttp.ContentTypeError as json_err:
-                    response_text = await resp.text()
-                    if "/m/login" in response_text:
-                        return {"success": True, "logged_in": False, "error": "需要重新登录"}
-                    return {"success": False, "error": f"JSON解析错误: {json_err}"}
-            else:
-                return {"success": False, "error": f"HTTP {resp.status}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -230,7 +200,7 @@ async def async_setup_entry(
         await session.close()
     entry.async_on_unload(cleanup_session)
 
-    # 1. 创建车辆信息Coordinator（10分钟）
+    # 1. 创建车辆信息Coordinator（由保活驱动）
     async def _update_vehicle_data():
         return await fetch_vehicle_info(session, access_token, jsessionid, province_code)
 
@@ -238,7 +208,7 @@ async def async_setup_entry(
         hass,
         logger=_LOGGER,
         name=f"{DOMAIN}_vehicle",
-        update_interval=VEHICLE_INFO_INTERVAL,
+        update_interval=None,  # 车辆信息由保活请求触发
         update_method=_update_vehicle_data,
     )
 
@@ -266,17 +236,28 @@ async def async_setup_entry(
         update_method=_update_surveillance_data,
     )
 
-    # 4. 创建登录状态检查Coordinator（5分钟）
-    async def _update_login_status():
-        return await check_login_status(session, access_token, jsessionid, province_code)
+    # 4. 登录状态：由保活任务驱动
+    login_status: Dict[str, Any] = {
+        "success": True,
+        "logged_in": True,
+        "message": "等待保活首次执行",
+        "status_code": None,
+        "final_url": "",
+        "checked_at": None,
+        "error": None,
+    }
+
+    async def _get_login_status():
+        return login_status
 
     login_coordinator = DataUpdateCoordinator(
         hass,
         logger=_LOGGER,
         name=f"{DOMAIN}_login",
-        update_interval=LOGIN_CHECK_INTERVAL,
-        update_method=_update_login_status,
+        update_interval=None,
+        update_method=_get_login_status,
     )
+    login_coordinator.async_set_updated_data(login_status.copy())
 
     # 5. GET保活请求（5分钟）- 使用登录接口返回的URL进行保活
     async def get_keepalive_task(_: datetime) -> None:
@@ -316,43 +297,111 @@ async def async_setup_entry(
                         f"GET保活请求发生重定向：原始URL: {url} -> 最终URL: {final_url}"
                     )
 
-                if "/views/member" in final_url:
-                    _LOGGER.info(
-                        f"GET保活请求成功，会话有效，重定向到已登录页面: {final_url} (状态码: {resp.status})"
-                    )
-                elif "/m/login" in final_url or "/login" in final_url:
-                    _LOGGER.warning(
-                        f"GET保活请求：会话已失效（被踢掉登录状态），重定向到登录页面: {final_url} (状态码: {resp.status})"
-                    )
-                elif resp.status == 200:
-                    _LOGGER.info(
-                        f"GET保活请求成功，状态码: {resp.status}，最终URL: {final_url}"
-                    )
-                elif resp.status == 302:
-                    location = resp.headers.get("Location", "")
-                    _LOGGER.warning(
-                        f"GET保活请求返回302，会话已失效（被踢掉登录状态），重定向到: {location}"
-                    )
-                elif resp.status == 404:
+                checked_at = datetime.utcnow().isoformat()
+                redirected_to_login = any(
+                    marker in final_url.lower()
+                    for marker in ["/m/login", "/login", "loginsuccess?fail", "logon"]
+                )
+                # 一些省份（如黑龙江）会在重定向链末端返回404，但会话仍然有效。
+                redirect_chain = [str(history_step.url) for history_step in resp.history]
+                redirect_status_chain = [history_step.status for history_step in resp.history]
+                if redirect_chain:
                     _LOGGER.debug(
-                        f"GET保活请求返回404 (URL可能已过期，但JSESSIONID可能仍然有效)，最终URL: {final_url}"
+                        "GET保活请求重定向链: %s",
+                        " -> ".join(redirect_chain + [final_url]),
                     )
-                elif resp.status == 400:
-                    _LOGGER.debug(
-                        f"GET保活请求返回400 (URL参数可能无效，但JSESSIONID可能仍然有效)，最终URL: {final_url}"
+                effective_success = resp.status == 200
+                if not effective_success:
+                    # 如果最终返回404，但重定向链存在且未指向登录页，视为成功
+                    if (
+                        resp.status == 404
+                        and redirect_chain
+                        and not redirected_to_login
+                    ):
+                        effective_success = True
+                    # 如果中间存在成功或非登录跳转的302，也认为成功
+                    elif any(
+                        status in (200, 302, 303, 307, 308)
+                        for status in redirect_status_chain
+                    ) and not redirected_to_login:
+                        effective_success = True
+
+                if effective_success and not redirected_to_login:
+                    login_status.update(
+                        {
+                            "success": True,
+                            "logged_in": True,
+                            "message": "会话有效",
+                            "status_code": resp.status,
+                            "final_url": final_url,
+                            "checked_at": checked_at,
+                            "error": None,
+                        }
                     )
+                    _LOGGER.info(
+                        f"GET保活请求成功，会话有效，最终URL: {final_url} (状态码: {resp.status})"
+                    )
+
+                    # 保活成功后刷新车辆信息，避免额外的周期性请求
+                    try:
+                        _LOGGER.debug("保活成功，触发车辆信息刷新")
+                        await vehicle_coordinator.async_request_refresh()
+                    except Exception as refresh_err:
+                        _LOGGER.warning(f"保活触发车辆信息刷新失败: {refresh_err}")
                 else:
-                    _LOGGER.warning(
-                        f"GET保活请求返回状态码: {resp.status}，最终URL: {final_url}"
+                    fail_reason = (
+                        "重定向至登录页" if redirected_to_login else "状态码异常"
                     )
+                    login_status.update(
+                        {
+                            "success": True,
+                            "logged_in": False,
+                            "message": f"需要重新登录（{fail_reason}）",
+                            "status_code": resp.status,
+                            "final_url": final_url,
+                            "checked_at": checked_at,
+                            "error": None,
+                        }
+                    )
+                    _LOGGER.warning(
+                        f"GET保活请求：会话失效或异常，需要重新登录。原因：{fail_reason}，状态码: {resp.status}，最终URL: {final_url}"
+                    )
+                login_coordinator.async_set_updated_data(login_status.copy())
         except aiohttp.ClientError as e:
+            login_status.update(
+                {
+                    "success": False,
+                    "logged_in": False,
+                    "message": "保活请求网络错误",
+                    "status_code": None,
+                    "final_url": "",
+                    "checked_at": datetime.utcnow().isoformat(),
+                    "error": str(e),
+                }
+            )
+            login_coordinator.async_set_updated_data(login_status.copy())
             _LOGGER.warning(f"GET保活请求网络错误: {e}")
         except Exception as e:
+            login_status.update(
+                {
+                    "success": False,
+                    "logged_in": False,
+                    "message": "保活请求未知错误",
+                    "status_code": None,
+                    "final_url": "",
+                    "checked_at": datetime.utcnow().isoformat(),
+                    "error": str(e),
+                }
+            )
+            login_coordinator.async_set_updated_data(login_status.copy())
             _LOGGER.error(f"GET保活请求未知错误: {e}")
 
     # 注册GET保活定时任务
     cancel_callback = async_track_time_interval(hass, get_keepalive_task, GET_KEEPALIVE_INTERVAL)
     entry.async_on_unload(cancel_callback)
+
+    # 启动时立即执行一次保活请求，避免等待下一个调度周期
+    hass.async_create_task(get_keepalive_task(datetime.utcnow()))
 
     # 创建传感器
     sensors = [
@@ -374,10 +423,10 @@ async def async_setup_entry(
     await login_coordinator.async_request_refresh()
 
     _LOGGER.info(
-        f"传感器设置完成 - 车辆信息:{VEHICLE_INFO_INTERVAL}, "
+        "传感器设置完成 - 车辆信息:保活驱动, "
         f"驾驶证违章:{VIOLATION_INFO_INTERVAL}, "
         f"车辆监控:{SURVEILLANCE_INFO_INTERVAL}, "
-        f"登录检查:{LOGIN_CHECK_INTERVAL}, "
+        "登录状态:保活驱动, "
         f"GET保活:{GET_KEEPALIVE_INTERVAL}"
     )
 
@@ -457,11 +506,20 @@ class VehicleSensor(Base12123Sensor):
     def native_value(self) -> StateType:
         """传感器主状态：车辆总数"""
         data = self.coordinator.data
-        if data and data.get("success") and "data" in data:
+        if not data:
+            return "未知"
+
+        if not data.get("success"):
+            code = data.get("code")
+            if code:
+                return f"服务异常({code})"
+            return "服务异常"
+
+        if "data" in data:
             vehicle_data = data["data"]
             if isinstance(vehicle_data, dict) and "data" in vehicle_data:
                 return vehicle_data["data"].get("totalCount", 0)
-            elif isinstance(vehicle_data, dict) and "content" in vehicle_data:
+            if isinstance(vehicle_data, dict) and "content" in vehicle_data:
                 return len(vehicle_data.get("content", []))
         return 0
 
@@ -471,7 +529,18 @@ class VehicleSensor(Base12123Sensor):
         attributes = {}
 
         data = self.coordinator.data
-        if data and data.get("success") and "data" in data:
+        if not data:
+            attributes["数据更新时间"] = self._format_update_time()
+            return attributes
+
+        if not data.get("success"):
+            attributes["错误信息"] = data.get("error", "未知错误")
+            if "code" in data:
+                attributes["错误代码"] = data.get("code")
+            attributes["数据更新时间"] = self._format_update_time()
+            return attributes
+
+        if "data" in data:
             vehicle_data = data["data"]
             if isinstance(vehicle_data, dict) and "data" in vehicle_data:
                 vehicles = vehicle_data["data"].get("content", [])

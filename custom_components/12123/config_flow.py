@@ -582,7 +582,9 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                     for id_field in ["sfzmhm", "idCard", "identityCard", "身份证号", "sfzm", "idcard"]:
                                         if id_field in data and data[id_field]:
                                             id_card = str(data[id_field])
-                                            _LOGGER.info(f"在顶层找到身份证号字段 {id_field}: {id_card[:6]}...{id_card[-4:]}")
+                                            _LOGGER.info(
+                                                f"在顶层找到身份证号字段 {id_field}: {id_card[:6]}...{id_card[-4:]}"
+                                            )
                                             if len(id_card) >= 4:
                                                 user_info["身份证号后4位"] = id_card[-4:]
                                                 user_info["完整身份证号"] = id_card
@@ -590,7 +592,7 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                                 user_info["身份证号后4位"] = id_card
                                                 user_info["完整身份证号"] = id_card
                                             break
-                                    
+
                                     # 如果还是没找到，进行全数据搜索
                                     if "完整身份证号" not in user_info and "姓名" not in user_info:
                                         _LOGGER.info("前述路径未找到用户信息，开始全数据搜索")
