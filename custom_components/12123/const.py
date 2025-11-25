@@ -43,7 +43,7 @@ PROVINCES = list(PROVINCE_CODE_MAPPING.keys())
 
 # 更新间隔配置
 VEHICLE_INFO_INTERVAL = timedelta(minutes=10)  # 车辆信息接口：10分钟一次
-VIOLATION_INFO_INTERVAL = timedelta(minutes=10)  # 驾驶证违章接口：10分钟一次
+VIOLATION_INFO_INTERVAL = timedelta(minutes=30)  # 驾驶证违章接口：30分钟一次
 SURVEILLANCE_INFO_INTERVAL = timedelta(minutes=30)  # 车辆监控接口：30分钟一次
 GET_KEEPALIVE_INTERVAL = timedelta(minutes=5)  # GET保活请求：5分钟一次
 REQUEST_TIMEOUT = 30  # 秒
