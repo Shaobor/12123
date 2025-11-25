@@ -1,0 +1,413 @@
+type: custom:button-card
+name: >
+  [[[
+  const time = states['sensor.12123_wei_zhang_jian_kong_ji_lu'].attributes?.['update'] ?? states['sensor.12123_wei_zhang_jian_kong_ji_lu'].attributes?.['数据更新时间'] ?? '获取失败';
+  return `<img src="/local/交管12123.png" width="25" style="vertical-align: text-bottom; margin-right: 8px; position: relative; top: 1px;">
+          交管12123 
+          <span style="margin-left: 10px; font-size: 14px; position: relative; top: -1px;">
+            ${time}更新
+            <img src="/local/update.png" width="16" style="vertical-align: text-bottom; margin-left: 4px;transform: rotate(-45deg);">
+          </span>`;
+  ]]]
+show_icon: true
+show_state: true
+show_name: true
+styles:
+  grid:
+    - grid-template-areas: |
+        "n n n n n"
+        "a a b b b"
+        "c c d d d"
+        "gap1 gap1 gap1 gap1 gap1"
+        "header header header header header"
+        "vehicles vehicles vehicles vehicles vehicles"
+        "gap2 gap2 gap2 gap2 gap2"
+        "violation_header violation_header violation_header violation_header violation_header"
+        "violations violations violations violations violations"
+    - grid-template-columns: auto auto auto auto auto
+    - grid-template-rows: auto auto auto 10px auto auto 10px auto auto
+  name:
+    - font-weight: bold
+    - font-size: 20px
+    - align-self: start
+    - justify-self: start
+    - margin: 3%
+    - margin-top: 10px;
+    - margin-left: 10px
+  card:
+    - padding: 6px
+custom_fields:
+  a:
+    card:
+      type: custom:button-card
+      entity: sensor.12123_jia_shi_zheng_xin_xi_2
+      name: null
+      show_icon: false
+      show_name: false
+      show_state: true
+      show_label: true
+      tap_action:
+        action: none
+      state_display: |
+        [[[
+         const attrs = states['sensor.12123_jia_shi_zheng_xin_xi_2']?.attributes || {};
+         const val = attrs['累积记分'] ?? attrs.ljjf ?? '未知';
+         return `<span style="font-size: 14px; font-weight: bold;">累计积分: ${val} 分</span>`;
+         ]]]
+      styles:
+        grid:
+          - grid-template-areas: "\"s\" \"n\""
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - left: 10px
+        state:
+          - font-size: 13px
+          - justify-self: start
+          - align-self: start
+          - white-space: normal
+          - word-break: break-word
+          - text-align: left
+  b:
+    card:
+      type: custom:button-card
+      entity: sensor.12123_jia_shi_zheng_xin_xi_2
+      name: null
+      show_icon: false
+      show_name: false
+      show_state: true
+      show_label: true
+      tap_action:
+        action: none
+      state_display: |
+        [[[
+         const attrs = states['sensor.12123_jia_shi_zheng_xin_xi_2']?.attributes || {};
+         const val = attrs['使用有效期至'] ?? attrs.syyxqz ?? attrs.yxq ?? '未知';
+         return `<span style="font-size: 14px; font-weight: bold;">驾驶证有效期: ${val}</span>`;
+         ]]]
+      styles:
+        grid:
+          - grid-template-areas: "\"s\" \"n\""
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+        state:
+          - font-size: 13px
+          - justify-self: start
+          - align-self: start
+          - white-space: normal
+          - word-break: break-word
+          - text-align: left
+  c:
+    card:
+      type: custom:button-card
+      entity: sensor.12123_jia_shi_zheng_xin_xi_2
+      name: null
+      show_icon: false
+      show_name: false
+      show_state: true
+      show_label: true
+      tap_action:
+        action: none
+      state_display: |
+        [[[
+         const attrs = states['sensor.12123_jia_shi_zheng_xin_xi_2']?.attributes || {};
+         const val = attrs['驾驶证状态'] ?? attrs.zt ?? '未知';
+         return `<span style="font-size: 14px; font-weight: bold;">证件状态: ${val}</span>`;
+         ]]]
+      styles:
+        grid:
+          - grid-template-areas: "\"s\" \"n\""
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - left: 10px;
+        state:
+          - font-size: 13px
+          - justify-self: start
+          - align-self: start
+          - white-space: normal
+          - word-break: break-word
+          - text-align: left
+  d:
+    card:
+      type: custom:button-card
+      entity: sensor.12123_jia_shi_zheng_xin_xi_2
+      name: null
+      show_icon: false
+      show_name: false
+      show_state: true
+      show_label: true
+      tap_action:
+        action: none
+      state_display: |
+        [[[
+         const attrs = states['sensor.12123_jia_shi_zheng_xin_xi_2']?.attributes || {};
+         const val = attrs['清分日期'] ?? attrs.qfrq ?? '未知';
+         return `<span style="font-size: 14px; font-weight: bold;">下次清分日期: ${val}</span>`;
+         ]]]
+      styles:
+        grid:
+          - grid-template-areas: "\"s\" \"n\""
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+        state:
+          - font-size: 13px
+          - justify-self: start
+          - align-self: start
+          - white-space: normal
+          - word-break: break-word
+          - text-align: left
+  header:
+    card:
+      type: custom:button-card
+      name: null
+      show_icon: false
+      show_name: false
+      show_state: true
+      show_label: true
+      tap_action:
+        action: none
+      state_display: |
+        [[[
+         return `<div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 8px; padding: 8px 10px; font-weight: bold; font-size: 14px;">
+           <div>车牌号码</div>
+           <div>车牌类型</div>
+           <div>检验有效期</div>
+           <div>电子监控</div>
+           <div>机动车状态</div>
+         </div>`;
+         ]]]
+      styles:
+        grid:
+          - grid-template-areas: "\"s\" \"n\""
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - left: 10px
+        state:
+          - font-size: 13px
+          - justify-self: start
+          - align-self: start
+  vehicles:
+    card:
+      type: custom:button-card
+      entity: sensor.12123_che_liang_xin_xi_2
+      name: null
+      show_icon: false
+      show_name: false
+      show_state: true
+      show_label: true
+      tap_action:
+        action: none
+      state_display: |
+        [[[
+         (function() {
+           const sensor = states['sensor.12123_che_liang_xin_xi_2'];
+           if (!sensor || !sensor.attributes) {
+             return '<div style="padding: 8px 10px; font-size: 14px; color: #f00;">传感器不存在或未加载</div>';
+           }
+           
+           const attrs = sensor.attributes;
+           // 尝试多种可能的属性名
+           const totalVehicles = attrs['车辆总数'] ?? attrs['totalCount'] ?? attrs['车辆数量'] ?? (parseInt(sensor.state) || 0);
+           let vehicleHtml = '';
+           
+           // 自动检测车辆数量（查找所有车辆相关的属性）
+           let detectedCount = 0;
+           const vehicleKeys = Object.keys(attrs).filter(k => k.includes('车辆') || k.includes('vehicle'));
+           if (vehicleKeys.length > 0) {
+             // 提取车辆编号
+             const vehicleNumbers = new Set();
+             vehicleKeys.forEach(k => {
+               const match = k.match(/车辆(\d+)/);
+               if (match) vehicleNumbers.add(parseInt(match[1]));
+             });
+             detectedCount = vehicleNumbers.size > 0 ? Math.max(...Array.from(vehicleNumbers)) : 0;
+           }
+           
+           const finalCount = totalVehicles > 0 ? totalVehicles : detectedCount;
+           
+           if (finalCount === 0) {
+             vehicleHtml = '<div style="padding: 8px 10px; font-size: 14px; color: #999;">暂无车辆信息</div>';
+           } else {
+             // 获取违章信息用于按车辆统计电子监控数量
+             const violationAttrs = states['sensor.12123_wei_zhang_jian_kong_ji_lu']?.attributes || {};
+             const violationTotal = violationAttrs['监控记录总数'] ?? violationAttrs['total'] ?? (parseInt(states['sensor.12123_wei_zhang_jian_kong_ji_lu']?.state) || 0);
+             
+             // 按车牌号统计每个车辆的违章数量
+             const vehicleViolationMap = {};
+             for (let v = 1; v <= violationTotal; v++) {
+               const violationPlate = violationAttrs[`记录${v}_车牌号`] ?? violationAttrs[`record${v}_plate`];
+               if (violationPlate) {
+                 vehicleViolationMap[violationPlate] = (vehicleViolationMap[violationPlate] || 0) + 1;
+               }
+             }
+             
+             for (let i = 1; i <= finalCount; i++) {
+               const plate = attrs[`车辆${i}_车牌号`] ?? attrs[`车辆${i}_车牌号码`] ?? '未知';
+               const type = attrs[`车辆${i}_类型`] ?? attrs[`车辆${i}_车牌类型`] ?? '未知';
+               const validDate = attrs[`车辆${i}_检验有效期至`] ?? attrs[`车辆${i}_检验有效期`] ?? '未知';
+               const status = attrs[`车辆${i}_状态`] ?? attrs[`车辆${i}_机动车状态`] ?? '未知';
+               
+               // 获取该车辆的电子监控数量（按车牌号匹配）
+               const vehicleViolations = vehicleViolationMap[plate] ?? 0;
+               
+               vehicleHtml += `<div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 8px; padding: 8px 10px; font-size: 14px; border-top: 1px solid rgba(255,255,255,0.1);">
+                 <div>${plate}</div>
+                 <div>${type}</div>
+                 <div>${validDate}</div>
+                 <div>${vehicleViolations}</div>
+                 <div>${status}</div>
+               </div>`;
+             }
+           }
+           
+           return vehicleHtml || '<div style="padding: 8px 10px; font-size: 14px; color: #999;">加载中...</div>';
+         })();
+         ]]]
+      styles:
+        grid:
+          - grid-template-areas: "\"s\" \"n\""
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - left: 10px
+        state:
+          - font-size: 13px
+          - justify-self: start
+          - align-self: start
+          - white-space: normal
+          - word-break: break-word
+  violation_header:
+    card:
+      type: custom:button-card
+      entity: sensor.12123_wei_zhang_jian_kong_ji_lu
+      name: null
+      show_icon: false
+      show_name: false
+      show_state: true
+      show_label: true
+      tap_action:
+        action: none
+      state_display: |
+        [[[
+         const attrs = states['sensor.12123_wei_zhang_jian_kong_ji_lu']?.attributes || {};
+         const total = attrs.wzts ?? attrs['监控记录总数'] ?? 0;
+         return `<div style="padding: 8px 10px; font-size: 14px; font-weight: bold;">
+           <span>共计${total}条违章信息</span>
+         </div>`;
+         ]]]
+      styles:
+        grid:
+          - grid-template-areas: "\"s\" \"n\""
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - left: 10px
+          - margin-bottom: "-20px"
+        state:
+          - font-size: 13px
+          - justify-self: start
+          - align-self: start
+          - white-space: normal
+          - word-break: break-word
+          - text-align: left
+  violations:
+    card:
+      type: custom:button-card
+      entity: sensor.12123_wei_zhang_jian_kong_ji_lu
+      name: null
+      show_icon: false
+      show_name: false
+      show_state: true
+      show_label: true
+      tap_action:
+        action: none
+      state_display: |
+        [[[
+         (function() {
+           const sensor = states['sensor.12123_wei_zhang_jian_kong_ji_lu'];
+           if (!sensor || !sensor.attributes) {
+             return '<div style="padding: 8px 10px; font-size: 14px; color: #f00;">传感器不存在或未加载</div>';
+           }
+           
+           const attrs = sensor.attributes;
+           // 尝试多种可能的属性名，包括传感器的state值
+           const total = attrs['监控记录总数'] ?? attrs['total'] ?? attrs['违章总数'] ?? attrs['wzts'] ?? (parseInt(sensor.state) || 0);
+           let violationHtml = '';
+           
+           // 自动检测违章记录数量
+           let detectedCount = 0;
+           const recordKeys = Object.keys(attrs).filter(k => k.includes('记录') || k.includes('record') || k.includes('wzxx') || k.includes('违章'));
+           if (recordKeys.length > 0) {
+             const recordNumbers = new Set();
+             recordKeys.forEach(k => {
+               const match = k.match(/(?:记录|record|wzxx|违章信息)(\d+)/);
+               if (match) recordNumbers.add(parseInt(match[1]));
+             });
+             detectedCount = recordNumbers.size > 0 ? Math.max(...Array.from(recordNumbers)) : 0;
+           }
+           
+           const finalCount = total > 0 ? total : detectedCount;
+           
+           if (finalCount === 0) {
+             violationHtml = '<div style="padding: 8px 10px; font-size: 14px; color: #999;">暂无违章信息</div>';
+           } else {
+             for (let i = 1; i <= finalCount; i++) {
+               const plate = attrs[`记录${i}_车牌号`] ?? attrs[`record${i}_plate`] ?? '';
+               const time = attrs[`记录${i}_时间`] ?? attrs[`record${i}_time`] ?? '';
+               const location = attrs[`记录${i}_地点`] ?? attrs[`记录${i}_地址`] ?? attrs[`record${i}_location`] ?? '';
+               const behavior = attrs[`记录${i}_行为`] ?? attrs[`记录${i}_违章行为`] ?? attrs[`record${i}_behavior`] ?? '';
+               const fine = attrs[`记录${i}_罚款`] ?? attrs[`记录${i}_罚款金额`] ?? attrs[`record${i}_fine`] ?? '';
+               const points = attrs[`记录${i}_记分`] ?? attrs[`记录${i}_扣分`] ?? attrs[`record${i}_points`] ?? '';
+               
+               // 构建违章信息字符串
+               let violationText = '';
+               if (behavior) violationText += behavior;
+               if (time) violationText += ` ${time}`;
+               if (location) violationText += ` ${location}`;
+               if (fine) violationText += ` 罚款${fine}元`;
+               if (points !== undefined && points !== null && points !== '') {
+                 violationText += ` ${points}分`;
+               }
+               if (plate) violationText += ` ${plate}`;
+               
+               if (!violationText) {
+                 // 如果没有找到标准字段，尝试使用wzxx格式
+                 violationText = attrs[`wzxx${i}`] ?? attrs[`违章信息${i}`] ?? '未知违章信息';
+               }
+               
+               violationHtml += `<div style="padding: 8px 10px; font-size: 14px; border-top: 1px solid rgba(255,255,255,0.1); overflow-wrap: break-word; word-break: break-word;">
+                 ${violationText}
+               </div>`;
+             }
+           }
+           
+           return violationHtml || '<div style="padding: 8px 10px; font-size: 14px; color: #999;">加载中...</div>';
+         })();
+         ]]]
+      styles:
+        grid:
+          - grid-template-areas: "\"s\" \"n\""
+        card:
+          - left: 10px
+          - background: none
+          - border: none
+          - box-shadow: none
+          - margin-bottom: "-25px"
+        state:
+          - font-size: 13px
+          - justify-self: start
+          - align-self: start
+          - white-space: normal
+          - word-break: break-word
+          - text-align: left
