@@ -6,12 +6,12 @@
     "aiohttp>=3.8.0"
   ],
   "dependencies": [],
-  "codeowners": ["@home-assistant/core"],
+  "codeowners": ["@Shaobor"],
   "config_flow": true,
-  "documentation": "https://www.home-assistant.io/integrations/12123",
-  "integration_type": "service",
+  "documentation": "https://github.com/Shaobor/12123",
+  "integration_type": "integration",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/home-assistant/core/issues",
+  "issue_tracker": "https://github.com/Shaobor/12123/issues",
   "quality_scale": "gold",
   "icon": "mdi:shield-car"
 }
