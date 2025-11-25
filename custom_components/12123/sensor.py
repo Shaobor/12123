@@ -173,7 +173,7 @@ async def async_setup_entry(
         name=f"12123 ({account_name})",
         manufacturer="Shaobor丶",
         model=f"12123 ({province_code.upper()}省)",
-        sw_version="1.0.0"
+        sw_version="1.0.9"
     )
 
     # 创建共享的session和SSL上下文
