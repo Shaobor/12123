@@ -265,67 +265,19 @@ class MySensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                         self._auth_cookies = cookies
                                         await self._cleanup_session()
 
-                                        # 检查是否已存在相同账号的配置
-                                        # 生成唯一标识符：身份证号后4位 + 省份代码（如果有身份证号）
-                                        # 或者使用 account_name + 省份代码
-                                        account_identifier = None
-                                        
-                                        if user_info and "身份证号后4位" in user_info:
-                                            account_identifier = f"{user_info['身份证号后4位']}_{self._selected_province_code}"
-                                        elif user_info and "完整身份证号" in user_info:
-                                            # 使用完整身份证号作为唯一标识符
-                                            account_identifier = f"{user_info['完整身份证号']}_{self._selected_province_code}"
-                                        else:
-                                            # 如果没有身份证号，使用 account_name + 省份代码
-                                            account_identifier = f"{account_name}_{self._selected_province_code}"
-                                        
-                                        # 检查现有配置条目
-                                        existing_entries = self.hass.config_entries.async_entries(DOMAIN)
-                                        for entry in existing_entries:
-                                            # 跳过当前正在重新认证的条目
-                                            if self.context.get("entry_id") == entry.entry_id:
-                                                continue
-                                            
-                                            entry_account_name = entry.data.get("account_name", "")
-                                            entry_province_code = entry.data.get("sf", "")
-                                            
-                                            # 首先检查身份证号（最准确）
-                                            if user_info and "完整身份证号" in user_info:
-                                                entry_id_card = entry.data.get("id_card_full")
-                                                if entry_id_card and entry_id_card == user_info["完整身份证号"]:
-                                                    _LOGGER.warning(f"检测到重复身份证号: {user_info['完整身份证号']}")
-                                                    errors["base"] = f"该身份证号对应的账号已配置，请勿重复添加"
-                                                    return self._show_next_form(errors)
-                                            
-                                            # 然后检查账号名称和省份是否相同
-                                            # 如果 account_name 是身份证号后4位，且与现有条目的 account_name 相同，且省份相同
-                                            if (entry_account_name == account_name and 
-                                                entry_province_code == self._selected_province_code):
-                                                _LOGGER.warning(f"检测到重复账号: {account_name} ({self._selected_province})")
-                                                errors["base"] = f"该账号 ({account_name}) 已在 {self._selected_province} 配置，请勿重复添加"
-                                                return self._show_next_form(errors)
-
                                         # 创建配置条目
                                         title = f"12123 ({self._selected_province} - {account_name})"
-                                        
-                                        # 准备配置数据，包含完整身份证号（如果可用）用于后续检查
-                                        config_data = {
-                                            "accessToken": cookies["access_token"],
-                                            "JSESSIONID-L": cookies["jsessionid"],
-                                            "acw_tc": cookies.get("acw_tc") or "",
-                                            "sf": self._selected_province_code,
-                                            "url": keepalive_url,
-                                            "account_name": account_name,
-                                            "province_name": self._selected_province
-                                        }
-                                        
-                                        # 如果有完整身份证号，保存它用于后续检查
-                                        if user_info and "完整身份证号" in user_info:
-                                            config_data["id_card_full"] = user_info["完整身份证号"]
-                                        
                                         return self.async_create_entry(
                                             title=title,
-                                            data=config_data,
+                                            data={
+                                                "accessToken": cookies["access_token"],
+                                                "JSESSIONID-L": cookies["jsessionid"],
+                                                "acw_tc": cookies.get("acw_tc") or "",  # acw_tc是可选的，如果为None则使用空字符串
+                                                "sf": self._selected_province_code,
+                                                "url": keepalive_url,  # 使用原始的带ticket的URL，保活时会自动重定向
+                                                "account_name": account_name,
+                                                "province_name": self._selected_province
+                                            },
                                             options={
                                                 "icon": DEFAULT_ICON
                                             }
