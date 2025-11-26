@@ -173,7 +173,7 @@ async def async_setup_entry(
         name=f"12123 ({account_name})",
         manufacturer="Shaobor丶",
         model=f"12123 ({province_code.upper()}省)",
-        sw_version="1.0.9"
+        sw_version="1.1.0"
     )
 
     # 创建共享的session和SSL上下文
@@ -551,6 +551,7 @@ class VehicleSensor(Base12123Sensor):
                     attributes[f"车辆{i}_类型"] = vehicle.get("cllxStr", "未知")
                     attributes[f"车辆{i}_状态"] = vehicle.get("ztStr", "未知")
                     attributes[f"车辆{i}_检验有效期至"] = vehicle.get("yxqz", "未知")
+                    attributes[f"车辆{i}_电子监控"] = vehicle.get("dzjk", "未知")
 
         attributes["数据更新时间"] = self._format_update_time()
         return attributes
